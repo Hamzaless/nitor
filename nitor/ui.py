@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -131,6 +132,7 @@ class MonitorWindow(Adw.ApplicationWindow):
         self._debounce_ms = settings.debounce_ms
         self._active_handler: int | None = None
         self._was_active = False
+        self._dialogs_open = 0
 
         self._title = Adw.WindowTitle(title=_("window.title"), subtitle="")
         header = Adw.HeaderBar()
@@ -190,7 +192,30 @@ class MonitorWindow(Adw.ApplicationWindow):
             return
         GLib.timeout_add(250, self._hide_if_unfocused)
 
+    def _track_dialog(self, dialog) -> None:
+        """Keep the panel alive while a dialog is open.
+
+        libadwaita dialogs (Adw.Dialog) are widgets, not Gtk.Windows, so they do
+        not show up in Gtk.Application.get_windows(). Count them explicitly.
+        """
+        self._dialogs_open += 1
+        released = {"done": False}
+
+        def release(*_args) -> None:
+            if released["done"]:
+                return
+            released["done"] = True
+            self._dialogs_open = max(0, self._dialogs_open - 1)
+            # Give focus a moment to return to the panel before deciding.
+            GLib.timeout_add(250, self._hide_if_unfocused)
+
+        for signal in ("closed", "response", "close-request"):
+            with contextlib.suppress(TypeError):
+                dialog.connect(signal, release)
+
     def _has_open_dialog(self) -> bool:
+        if self._dialogs_open > 0:
+            return True
         application = self.get_application()
         return application is not None and len(application.get_windows()) > 1
 
@@ -522,6 +547,8 @@ class MonitorWindow(Adw.ApplicationWindow):
         dialog.set_default_response("save")
         dialog.set_close_response("cancel")
 
+        self._track_dialog(dialog)
+
         def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
             if response != "save":
                 return
@@ -700,6 +727,7 @@ class MonitorWindow(Adw.ApplicationWindow):
                     GLib.idle_add(self._apply, code, current, None)
 
         dialog.connect("response", on_response)
+        self._track_dialog(dialog)
         dialog.present()
 
     def _write(self, code: int, value: int, *, verify: bool = False) -> None:
@@ -764,6 +792,7 @@ class MonitorWindow(Adw.ApplicationWindow):
             threading.Thread(target=run, daemon=True).start()
 
         dialog.connect("response", on_response)
+        self._track_dialog(dialog)
         dialog.present()
 
     def _refresh_all_delayed(self) -> bool:
@@ -844,6 +873,8 @@ class NitorApplication(Adw.Application):
         )
         dialog.add_link(_("about.website"), "https://github.com/Hamzaless/nitor")
         dialog.add_link(_("about.issues"), "https://github.com/Hamzaless/nitor/issues")
+        if self._window is not None:
+            self._window._track_dialog(dialog)
         dialog.present(self._window or self.get_active_window())
 
     def reload_ui(self, language: str | None = None) -> None:

@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - 2026-10-27
+
+### Fixed
+
+- The panel no longer hides while a dialog (settings, save preset, confirmation
+  or about) is open. libadwaita dialogs are widgets rather than windows, so
+  they are now tracked explicitly.
+
 ## [1.2.0] - 2026-10-27
 
 ### Added
@@ -53,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.2.1]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.1
 [1.2.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.0.0
