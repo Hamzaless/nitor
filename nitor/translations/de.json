@@ -111,5 +111,14 @@
   "settings.diagnostics": "Diagnose",
   "settings.diagnostics_desc": "Version, Monitor- und Systemdetails für Fehlerberichte",
   "settings.copy": "Kopieren",
-  "settings.copied": "In die Zwischenablage kopiert"
+  "settings.copied": "In die Zwischenablage kopiert",
+  "about.title": "Über Nitor",
+  "about.links": "Links",
+  "about.releases": "Veröffentlichungen",
+  "about.info": "Informationen",
+  "about.developer": "Entwickler",
+  "about.license": "Lizenz",
+  "about.built_with": "Erstellt mit",
+  "about.languages": "Sprachen",
+  "about.open": "Öffnen"
 }

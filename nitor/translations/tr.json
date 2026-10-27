@@ -172,5 +172,14 @@
   "schedule.added": "Zamanlama eklendi",
   "schedule.removed": "Zamanlama silindi",
   "schedule.time_hint": "Saat (SS:DD) ve preset seç",
-  "schedule.bad_time": "Geçersiz saat"
+  "schedule.bad_time": "Geçersiz saat",
+  "about.title": "Nitor Hakkında",
+  "about.links": "Bağlantılar",
+  "about.releases": "Sürümler",
+  "about.info": "Bilgi",
+  "about.developer": "Geliştirici",
+  "about.license": "Lisans",
+  "about.built_with": "Kullanılan teknolojiler",
+  "about.languages": "Diller",
+  "about.open": "Aç"
 }

@@ -172,5 +172,14 @@
   "schedule.added": "Schedule entry added",
   "schedule.removed": "Schedule entry removed",
   "schedule.time_hint": "Time (HH:MM) and preset",
-  "schedule.bad_time": "Invalid time"
+  "schedule.bad_time": "Invalid time",
+  "about.title": "About Nitor",
+  "about.links": "Links",
+  "about.releases": "Releases",
+  "about.info": "Information",
+  "about.developer": "Developer",
+  "about.license": "License",
+  "about.built_with": "Built with",
+  "about.languages": "Languages",
+  "about.open": "Open"
 }

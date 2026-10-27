@@ -18,6 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Tag based release workflow: `v*` tags run lint and tests, then publish a
   GitHub release with generated notes.
 
+## [1.4.2] - 2026-10-27
+
+### Changed
+
+- The About dialog is now built by Nitor itself instead of libadwaita, so every
+  label follows the in-app language, including Turkish.
+- Locale detection ignores `C` / `C.UTF-8` and only selects languages that are
+  actually shipped, falling back to English otherwise.
+- Added the new About strings to German, Spanish, French and Russian.
+
+### Fixed
+
+- Translation files had a stray escaped newline that made them invalid JSON.
+
 ## [1.4.1] - 2026-10-27
 
 ### Fixed
@@ -120,6 +134,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.4.2]: https://github.com/Hamzaless/nitor/releases/tag/v1.4.2
 [1.4.1]: https://github.com/Hamzaless/nitor/releases/tag/v1.4.1
 [1.4.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.4.0
 [1.3.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.3.0

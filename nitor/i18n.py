@@ -60,11 +60,14 @@ def _detect_language() -> str:
     with contextlib.suppress(ValueError, TypeError):
         candidates.append(locale.getlocale()[0])
 
+    available = set(available_languages())
     for value in candidates:
-        if not value or value in {"C", "POSIX"}:
+        if not value:
             continue
         code = value.split(".", 1)[0].split("_", 1)[0].strip().lower()
-        if code:
+        if code in {"", "c", "posix"}:
+            continue
+        if code in available:
             return code
     return "en"
 

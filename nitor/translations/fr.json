@@ -111,5 +111,14 @@
   "settings.diagnostics": "Diagnostic",
   "settings.diagnostics_desc": "Version, moniteur et système pour les rapports de bug",
   "settings.copy": "Copier",
-  "settings.copied": "Copié dans le presse-papiers"
+  "settings.copied": "Copié dans le presse-papiers",
+  "about.title": "À propos de Nitor",
+  "about.links": "Liens",
+  "about.releases": "Versions",
+  "about.info": "Informations",
+  "about.developer": "Développeur",
+  "about.license": "Licence",
+  "about.built_with": "Développé avec",
+  "about.languages": "Langues",
+  "about.open": "Ouvrir"
 }

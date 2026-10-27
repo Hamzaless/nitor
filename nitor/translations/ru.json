@@ -111,5 +111,14 @@
   "settings.diagnostics": "Диагностика",
   "settings.diagnostics_desc": "Версия, монитор и система для отчётов об ошибках",
   "settings.copy": "Копировать",
-  "settings.copied": "Скопировано в буфер обмена"
+  "settings.copied": "Скопировано в буфер обмена",
+  "about.title": "О Nitor",
+  "about.links": "Ссылки",
+  "about.releases": "Релизы",
+  "about.info": "Информация",
+  "about.developer": "Разработчик",
+  "about.license": "Лицензия",
+  "about.built_with": "Создано с помощью",
+  "about.languages": "Языки",
+  "about.open": "Открыть"
 }

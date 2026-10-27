@@ -111,5 +111,14 @@
   "settings.diagnostics": "Diagnóstico",
   "settings.diagnostics_desc": "Versión, monitor y sistema para informes de errores",
   "settings.copy": "Copiar",
-  "settings.copied": "Copiado al portapapeles"
+  "settings.copied": "Copiado al portapapeles",
+  "about.title": "Acerca de Nitor",
+  "about.links": "Enlaces",
+  "about.releases": "Versiones",
+  "about.info": "Información",
+  "about.developer": "Desarrollador",
+  "about.license": "Licencia",
+  "about.built_with": "Creado con",
+  "about.languages": "Idiomas",
+  "about.open": "Abrir"
 }

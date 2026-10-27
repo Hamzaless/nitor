@@ -1672,19 +1672,62 @@ class NitorApplication(Adw.Application):
         self._window.resize_for_view(target)
 
     def _on_about(self, *_args) -> None:
-        dialog = Adw.AboutDialog(
-            application_name="Nitor",
-            application_icon=__app_id__,
-            version=__version__,
-            developer_name="Hamzaless",
-            comments=_("about.comments"),
-            website="https://github.com/Hamzaless/nitor",
-            issue_url="https://github.com/Hamzaless/nitor/issues",
-            license_type=Gtk.License.MIT_X11,
-            developers=["Hamzaless https://github.com/Hamzaless"],
+        dialog = Adw.Dialog()
+        dialog.set_title(_("about.title"))
+        dialog.set_content_width(470)
+        dialog.set_content_height(770)
+
+        page = Adw.PreferencesPage()
+
+        hero_group = Adw.PreferencesGroup()
+        hero = Adw.ActionRow(title="Nitor", subtitle=_("app.tagline"))
+        icon = Gtk.Image.new_from_icon_name(__app_id__)
+        icon.set_pixel_size(48)
+        hero.add_prefix(icon)
+        version = Gtk.Label(label=f"v{__version__}")
+        version.add_css_class("dim-label")
+        hero.add_suffix(version)
+        hero_group.add(hero)
+        page.add(hero_group)
+
+        text_group = Adw.PreferencesGroup()
+        comments = Gtk.Label(label=_("about.comments"), wrap=True, xalign=0)
+        comments.set_margin_top(10)
+        comments.set_margin_bottom(10)
+        comments.set_margin_start(12)
+        comments.set_margin_end(12)
+        text_group.add(comments)
+        page.add(text_group)
+
+        links = Adw.PreferencesGroup(title=_("about.links"))
+        page.add(links)
+
+        def add_link(title: str, url: str) -> None:
+            row = Adw.ActionRow(title=title, subtitle=url.replace("https://", ""))
+            button = Gtk.Button(label=_("about.open"))
+            button.add_css_class("pill")
+            button.connect(
+                "clicked",
+                lambda *_args: Gio.AppInfo.launch_default_for_uri(url, None),
+            )
+            row.add_suffix(button)
+            links.add(row)
+
+        add_link(_("about.website"), "https://github.com/Hamzaless/nitor")
+        add_link(_("about.issues"), "https://github.com/Hamzaless/nitor/issues")
+        add_link(_("about.releases"), "https://github.com/Hamzaless/nitor/releases")
+
+        info = Adw.PreferencesGroup(title=_("about.info"))
+        page.add(info)
+        info.add(Adw.ActionRow(title=_("about.developer"), subtitle="Hamzaless"))
+        info.add(Adw.ActionRow(title=_("about.license"), subtitle="MIT"))
+        info.add(Adw.ActionRow(title=_("about.built_with"), subtitle="GTK 4 · libadwaita · ddcutil"))
+        languages = ", ".join(
+            LANGUAGE_NAMES.get(code, code) for code in available_languages()
         )
-        dialog.add_link(_("about.website"), "https://github.com/Hamzaless/nitor")
-        dialog.add_link(_("about.issues"), "https://github.com/Hamzaless/nitor/issues")
+        info.add(Adw.ActionRow(title=_("about.languages"), subtitle=languages))
+
+        dialog.set_child(page)
         if self._window is not None:
             self._window._track_dialog(dialog)
         dialog.present(self._window or self.get_active_window())
