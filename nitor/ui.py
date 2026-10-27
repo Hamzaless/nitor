@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import os
+import platform
 import threading
 import time
 from dataclasses import dataclass, field
@@ -18,7 +19,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from . import __app_id__, __version__  # noqa: E402
+from . import __app_id__, __version__, updates  # noqa: E402
 from .ddc import (  # noqa: E402
     DISPLAY_ORDER,
     FEATURES,
@@ -26,6 +27,7 @@ from .ddc import (  # noqa: E402
     Monitor,
     available,
     capabilities,
+    ddcutil_version,
     detect,
     format_value,
     get,
@@ -149,16 +151,23 @@ class MonitorWindow(Adw.ApplicationWindow):
 
         menu = Gio.Menu()
         menu.append(_("menu.settings"), "app.settings")
+        menu.append(_("menu.check_updates"), "app.check-updates")
         menu.append(_("menu.refresh"), "win.refresh")
         menu.append(_("menu.about"), "app.about")
         self._menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
         header.pack_end(self._menu_button)
+
+        self._banner = Adw.Banner()
+        self._banner.set_revealed(False)
+        self._banner.connect("button-clicked", self._open_release)
+        self._release_url = ""
 
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
 
         toolbar = Adw.ToolbarView()
         toolbar.add_top_bar(header)
+        toolbar.add_top_bar(self._banner)
         toolbar.set_content(self._stack)
 
         self._toasts = Adw.ToastOverlay()
@@ -565,6 +574,78 @@ class MonitorWindow(Adw.ApplicationWindow):
         dialog.connect("response", on_response)
         dialog.present(self)
 
+    # -------------------------------------------------------------- updates --
+    def _update_cache_path(self) -> Path:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.join(Path.home(), ".cache")
+        return Path(base) / "nitor" / "update.json"
+
+    def _read_update_cache(self) -> dict:
+        try:
+            data = json.loads(self._update_cache_path().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _write_update_cache(self, release: updates.Release) -> None:
+        path = self._update_cache_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"checked": time.time(), "latest": release.version, "url": release.url}),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    def _maybe_check_updates(self) -> None:
+        cache = self._read_update_cache()
+        latest = cache.get("latest")
+        url = cache.get("url")
+        if isinstance(latest, str) and isinstance(url, str) and updates.is_newer(latest, __version__):
+            self._show_update_banner(latest, url)
+
+        if not self._settings.check_updates:
+            return
+        checked = cache.get("checked", 0)
+        if isinstance(checked, (int, float)) and time.time() - checked < 86400:
+            return
+        threading.Thread(target=self._update_worker, args=(False,), daemon=True).start()
+
+    def check_updates(self) -> None:
+        self._toast(_("update.checking"))
+        threading.Thread(target=self._update_worker, args=(True,), daemon=True).start()
+
+    def _update_worker(self, manual: bool) -> None:
+        try:
+            release = updates.latest_release()
+        except Exception as exc:  # network failures must never break the UI
+            log.debug("Update check failed: %s", exc)
+            if manual:
+                GLib.idle_add(self._toast, _("update.error"))
+            return
+        if release is None:
+            if manual:
+                GLib.idle_add(self._toast, _("update.error"))
+            return
+        self._write_update_cache(release)
+        if updates.is_newer(release.version, __version__):
+            GLib.idle_add(self._show_update_banner, release.version, release.url)
+            if manual:
+                GLib.idle_add(self._toast, _("update.available_title", version=release.version))
+        elif manual:
+            GLib.idle_add(self._toast, _("update.up_to_date"))
+
+    def _show_update_banner(self, version: str, url: str) -> bool:
+        self._release_url = url
+        self._banner.set_title(_("update.available_title", version=version))
+        self._banner.set_button_label(_("update.view"))
+        self._banner.set_revealed(True)
+        return False
+
+    def _open_release(self, *_args) -> None:
+        if self._release_url:
+            Gio.AppInfo.launch_default_for_uri(self._release_url, None)
+
     # ------------------------------------------------------------- settings --
     def show_settings(self) -> None:
         dialog = Adw.PreferencesDialog()
@@ -598,6 +679,24 @@ class MonitorWindow(Adw.ApplicationWindow):
         debounce_row.connect("notify::value", self._on_debounce_changed)
         group.add(debounce_row)
 
+        updates_row = Adw.SwitchRow(
+            title=_("settings.check_updates"),
+            subtitle=_("settings.check_updates_desc"),
+        )
+        updates_row.set_active(self._settings.check_updates)
+        updates_row.connect("notify::active", self._on_check_updates_toggled)
+        group.add(updates_row)
+
+        diagnostics_row = Adw.ActionRow(
+            title=_("settings.diagnostics"),
+            subtitle=_("settings.diagnostics_desc"),
+        )
+        diagnostics_button = Gtk.Button(label=_("settings.copy"))
+        diagnostics_button.add_css_class("pill")
+        diagnostics_button.connect("clicked", lambda *_: self._copy_diagnostics())
+        diagnostics_row.add_suffix(diagnostics_button)
+        group.add(diagnostics_row)
+
         dialog.present(self)
 
     def _on_language_selected(self, row: Adw.ComboRow, _pspec, languages: list[str]) -> None:
@@ -618,6 +717,31 @@ class MonitorWindow(Adw.ApplicationWindow):
         self._settings.auto_hide = enabled
         self._settings.save()
         self._set_auto_hide(enabled)
+
+    def _on_check_updates_toggled(self, row: Adw.SwitchRow, _pspec) -> None:
+        self._settings.check_updates = row.get_active()
+        self._settings.save()
+
+    def _copy_diagnostics(self) -> None:
+        def run() -> None:
+            lines = [
+                f"Nitor {__version__}",
+                f"Monitor: {self._monitor.label if self._monitor is not None else '-'}",
+                f"ddcutil: {ddcutil_version() or '-'}",
+                f"Session: {os.environ.get('XDG_SESSION_TYPE', '-')} / "
+                f"{os.environ.get('XDG_CURRENT_DESKTOP', '-')}",
+                f"System: {platform.platform()}",
+            ]
+            GLib.idle_add(self._set_clipboard, "\n".join(lines))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _set_clipboard(self, text: str) -> bool:
+        display = Gdk.Display.get_default()
+        if display is not None:
+            display.get_clipboard().set(text)
+            self._toast(_("settings.copied"))
+        return False
 
     def _on_debounce_changed(self, row: Adw.SpinRow, _pspec) -> None:
         value = int(row.get_value())
@@ -644,6 +768,7 @@ class MonitorWindow(Adw.ApplicationWindow):
         self._spinner.set_visible(False)
         self._ready = True
         self._save_cache()
+        self._maybe_check_updates()
         return False
 
     def _apply(self, code: int, current: int | None, maximum: int | None) -> bool:
@@ -847,6 +972,13 @@ class NitorApplication(Adw.Application):
         about = Gio.SimpleAction.new("about", None)
         about.connect("activate", self._on_about)
         self.add_action(about)
+
+        check_updates = Gio.SimpleAction.new("check-updates", None)
+        check_updates.connect(
+            "activate",
+            lambda *_: self._window.check_updates() if self._window is not None else None,
+        )
+        self.add_action(check_updates)
 
         settings = Gio.SimpleAction.new("settings", None)
         settings.connect(

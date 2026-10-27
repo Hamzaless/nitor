@@ -54,8 +54,12 @@ Everything above is conditional: Nitor only shows what your monitor reports.
   reused, so a full refresh takes about two seconds.
 - Auto-hide: the panel closes when you click somewhere else, so it behaves like a
   HUD. Disable in Settings, with `--no-auto-hide` or `NITOR_AUTO_HIDE=0`.
-- Settings dialog for language, auto-hide and slider delay (saved in
-  `~/.config/nitor/settings.json`).
+- Settings dialog for language, auto-hide, slider delay and update checks
+  (saved in `~/.config/nitor/settings.json`).
+- Update checks: once a day Nitor asks the GitHub releases API and shows a
+  banner when a newer version exists. Manual check in the menu, opt-out in
+  Settings.
+- Diagnostics: copy version, monitor and session details for bug reports.
 - A full-window progress overlay shows exactly which setting is being written
   while a preset is applied, and blocks input until it finishes.
 - Single-instance window, so a keyboard shortcut always focuses the same panel.

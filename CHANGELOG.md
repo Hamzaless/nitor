@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-10-27
+
+### Added
+
+- Update checks: Nitor asks the GitHub releases API once a day and shows a
+  banner when a newer version exists. Manual check in the menu; can be turned
+  off in Settings.
+- Diagnostics: copy version, monitor, ddcutil and session details for bug
+  reports.
+- Settings: automatic update checks can be toggled.
+
 ## [1.2.1] - 2026-10-27
 
 ### Fixed
@@ -61,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.3.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.3.0
 [1.2.1]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.1
 [1.2.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.1.0

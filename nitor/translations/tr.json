@@ -99,5 +99,17 @@
   "preset.applying": "Uygulanıyor…",
   "preset.preparing": "Hazırlanıyor…",
   "preset.step": "{feature} ayarlanıyor…",
-  "error.locked": "{feature} bu görüntü modunda kilitli"
+  "error.locked": "{feature} bu görüntü modunda kilitli",
+  "menu.check_updates": "Güncellemeleri kontrol et",
+  "update.available_title": "Nitor {version} hazır",
+  "update.view": "Sürümü aç",
+  "update.up_to_date": "Güncelsin",
+  "update.error": "Güncellemeler kontrol edilemedi",
+  "update.checking": "Güncellemeler kontrol ediliyor…",
+  "settings.check_updates": "Güncellemeleri otomatik kontrol et",
+  "settings.check_updates_desc": "Günde bir kez GitHub'da yeni sürüm arar",
+  "settings.diagnostics": "Tanılama",
+  "settings.diagnostics_desc": "Hata bildirimi için sürüm, monitör ve sistem bilgisi",
+  "settings.copy": "Kopyala",
+  "settings.copied": "Panoya kopyalandı"
 }

@@ -99,5 +99,17 @@
   "preset.applying": "Applying…",
   "preset.preparing": "Preparing…",
   "preset.step": "Setting {feature}…",
-  "error.locked": "{feature} is locked in this picture mode"
+  "error.locked": "{feature} is locked in this picture mode",
+  "menu.check_updates": "Check for updates",
+  "update.available_title": "Nitor {version} is available",
+  "update.view": "View release",
+  "update.up_to_date": "You are up to date",
+  "update.error": "Could not check for updates",
+  "update.checking": "Checking for updates…",
+  "settings.check_updates": "Check for updates automatically",
+  "settings.check_updates_desc": "Asks GitHub once a day for a newer release",
+  "settings.diagnostics": "Diagnostics",
+  "settings.diagnostics_desc": "Version, monitor and system details for bug reports",
+  "settings.copy": "Copy",
+  "settings.copied": "Copied to clipboard"
 }

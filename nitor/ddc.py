@@ -23,6 +23,7 @@ __all__ = [
     "available",
     "capabilities",
     "detect",
+    "ddcutil_version",
     "format_value",
     "get",
     "read_many",
@@ -339,6 +340,16 @@ def detect() -> list[Monitor]:
             _BUS = match.group(1)
     flush()
     return monitors
+
+
+def ddcutil_version() -> str:
+    """Return the version line reported by ddcutil, or an empty string."""
+    try:
+        response = _run("--version", use_bus=False)
+    except DdcError:
+        return ""
+    lines = response.stdout.strip().splitlines()
+    return lines[0].strip() if lines else ""
 
 
 def format_value(code: int, value: int | None) -> str:

@@ -23,6 +23,7 @@ def config_path() -> Path:
 class Settings:
     language: str = "system"
     auto_hide: bool = True
+    check_updates: bool = True
     debounce_ms: int = 150
     presets: dict[str, dict[str, int]] = field(default_factory=dict)
 
@@ -42,6 +43,9 @@ class Settings:
         auto_hide = raw.get("auto_hide")
         if isinstance(auto_hide, bool):
             settings.auto_hide = auto_hide
+        check_updates = raw.get("check_updates")
+        if isinstance(check_updates, bool):
+            settings.check_updates = check_updates
         debounce = raw.get("debounce_ms")
         if isinstance(debounce, int):
             settings.debounce_ms = max(50, min(2000, debounce))
