@@ -89,6 +89,9 @@ class Settings:
     schedule: list[dict[str, object]] = field(default_factory=list)
     app_presets: dict[str, str] = field(default_factory=dict)
     last_run: dict[str, str] = field(default_factory=dict)
+    monitor_key: str = ""
+    profiles: dict[str, dict[str, int]] = field(default_factory=dict)
+    schedule_enabled: bool = False
 
     @classmethod
     def load(cls) -> Settings:
@@ -128,6 +131,31 @@ class Settings:
                 if entries:
                     cleaned[name[:60]] = entries
             settings.presets = cleaned
+
+        monitor_key = raw.get("monitor_key")
+        if isinstance(monitor_key, str):
+            settings.monitor_key = monitor_key[:200]
+        profiles = raw.get("profiles")
+        if isinstance(profiles, dict):
+            cleaned_profiles: dict[str, dict[str, int]] = {}
+            for key, values in profiles.items():
+                if not isinstance(key, str) or not isinstance(values, dict):
+                    continue
+                entries = {}
+                for code, value in values.items():
+                    try:
+                        code_int = int(code)
+                        value_int = int(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if 0 <= code_int <= 255 and 0 <= value_int <= 0xFFFF:
+                        entries[str(code_int)] = value_int
+                if entries:
+                    cleaned_profiles[key[:200]] = entries
+            settings.profiles = cleaned_profiles
+        schedule_enabled = raw.get("schedule_enabled")
+        if isinstance(schedule_enabled, bool):
+            settings.schedule_enabled = schedule_enabled
 
         settings.schedule = _clean_schedule(raw.get("schedule"))
         settings.app_presets = _clean_app_presets(raw.get("app_presets"))

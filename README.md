@@ -41,7 +41,8 @@ undocumented VCP codes. Nitor aims for the middle ground:
 | **On-screen display** | OSD language |
 | **Information** | Horizontal and vertical frequency, panel technology, usage time, application key, controller, firmware, VCP version |
 | **Actions** | Restore factory defaults, restore brightness/contrast, restore colour |
-| **Presets** | Save the current state and re-apply it later from a dropdown |
+| **Presets** | Save, rename, duplicate, delete, import and export presets |
+| **Details** | Resolution, refresh rate, panel type, serial, firmware, VCP version, usage time |
 
 Everything above is conditional: Nitor only shows what your monitor reports.
 
@@ -59,7 +60,13 @@ Everything above is conditional: Nitor only shows what your monitor reports.
 - Update checks: once a day Nitor asks the GitHub releases API and shows a
   banner when a newer version exists. Manual check in the menu, opt-out in
   Settings.
-- Diagnostics: copy version, monitor and session details for bug reports.
+- Diagnostics: copy version, monitor and session details for bug reports, or
+  open a prefilled GitHub issue.
+- Multi-monitor: pick a display from the header, with hotplug detection and
+  per-connection profiles.
+- Search, compact mode and a StatusNotifier tray icon.
+- OSD notifications on Hyprland when a preset or brightness value changes.
+- Scheduled presets, applied by a systemd user timer.
 - A full-window progress overlay shows exactly which setting is being written
   while a preset is applied, and blocks input until it finishes.
 - Single-instance window, so a keyboard shortcut always focuses the same panel.
@@ -119,6 +126,16 @@ nitor              # open the panel
 nitor --lang tr    # force a language
 nitor --debug      # verbose logging
 nitor --no-auto-hide  # keep the window open when it loses focus
+
+# Automation and scripting
+nitor --get 0x10                     # print brightness
+nitor --set 0x10=45                  # absolute
+nitor --set 0x10=+5 --set 0x12=-5    # relative
+nitor --list-presets
+nitor --apply-preset "Gece"
+nitor --schedule-apply               # used by the systemd timer
+nitor --menu                         # wofi/rofi preset picker
+nitor --daemon                       # schedules + per-app presets
 nitor --version
 ```
 
@@ -135,6 +152,13 @@ bind = SUPER, M, exec, nitor
 windowrulev2 = float, class:^(io.github.hamzaless.Nitor)$
 windowrulev2 = size 560 780, class:^(io.github.hamzaless.Nitor)$
 windowrulev2 = center, class:^(io.github.hamzaless.Nitor)$
+```
+
+Brightness shortcuts (Hyprland):
+
+```ini
+bind = SUPER, bracketleft,  exec, nitor --set 0x10=-5
+bind = SUPER, bracketright, exec, nitor --set 0x10=+5
 ```
 
 **GNOME / KDE**: create a custom shortcut that runs `nitor`.

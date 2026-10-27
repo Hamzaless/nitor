@@ -18,6 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Tag based release workflow: `v*` tags run lint and tests, then publish a
   GitHub release with generated notes.
 
+## [1.4.0] - 2026-10-27
+
+### Added
+
+- Multi-monitor support with a selector, per-display I2C buses, hotplug
+  detection and per-connection profiles.
+- A details tab with resolution, refresh rate, panel type, serial, firmware,
+  VCP version, usage time and a prefilled "report an issue" link.
+- Preset management: rename, duplicate, delete, JSON import and export.
+- Feature search, compact mode and a richer header.
+- StatusNotifier tray icon (tested against Noctalia) and Hyprland OSD
+  notifications for preset and brightness changes.
+- Scheduled presets with a systemd user timer, configured from Settings.
+- CLI: `--get`, `--set` (absolute or `+5` / `-5`), `--list-presets`,
+  `--apply-preset`, `--schedule-apply`, `--daemon`, `--menu`.
+- `Super+[` / `Super+]` brightness shortcuts via `nitor --set 0x10=-5/+5`.
+
+### Changed
+
+- Window layout now uses a ViewSwitcher: Controls, Compact and Details.
+
 ## [1.3.0] - 2026-10-27
 
 ### Added
@@ -86,6 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.4.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.4.0
 [1.3.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.3.0
 [1.2.1]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.1
 [1.2.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.0

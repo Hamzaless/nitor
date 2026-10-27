@@ -15,7 +15,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-from . import ddc, presets, schedule
+from . import ddc, osd, presets, schedule
 from . import settings as settings_module
 
 __all__ = [
@@ -61,11 +61,23 @@ def _parse_value(text: str) -> int:
     return value
 
 
-def _parse_assignment(text: str) -> tuple[int, int]:
+def _parse_assignment(text: str) -> tuple[int, str]:
     code_text, separator, value_text = text.partition("=")
     if not separator:
         raise ValueError(f"expected CODE=VALUE, got {text!r}")
-    return parse_code(code_text), _parse_value(value_text)
+    return parse_code(code_text), value_text.strip()
+
+
+def _resolve_value(code: int, raw: str) -> int:
+    """Resolve an absolute or relative (``+5`` / ``-5``) value."""
+    if raw.startswith(("+", "-")):
+        current, maximum = ddc.get(code)
+        if current is None:
+            raise ValueError(f"cannot read VCP 0x{code:02X} for a relative change")
+        target = current + int(raw, 10)
+        limit = maximum if maximum is not None else 100
+        return max(0, min(limit, target))
+    return _parse_value(raw)
 
 
 def apply_named_preset(settings: settings_module.Settings, name: str) -> bool:
@@ -119,6 +131,7 @@ def run_due_preset(
 
     settings.last_run[name] = moment.date().isoformat()
     settings.save()
+    osd.show(f"Nitor: {name}")
     return 0
 
 
@@ -147,7 +160,8 @@ def _run_set(assignments: list[str]) -> int:
     pairs: list[tuple[int, int]] = []
     for text in assignments:
         try:
-            pairs.append(_parse_assignment(text))
+            code, raw = _parse_assignment(text)
+            pairs.append((code, _resolve_value(code, raw)))
         except ValueError as exc:
             _error(str(exc))
             return 2
@@ -161,6 +175,7 @@ def _run_set(assignments: list[str]) -> int:
         if not success:
             _error(f"could not set VCP 0x{code:02X} to {value}")
             return 1
+        osd.show(f"0x{code:02X} = {value}")
     return 0
 
 
@@ -171,6 +186,7 @@ def _run_apply_preset(settings: settings_module.Settings, name: str) -> int:
     if not apply_named_preset(settings, name):
         _error(f"could not apply preset: {name}")
         return 1
+    osd.show(f"Nitor: {name}")
     return 0
 
 
