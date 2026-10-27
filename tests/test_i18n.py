@@ -37,6 +37,20 @@ def test_shipped_languages():
     languages = i18n.available_languages()
     assert "en" in languages
     assert "tr" in languages
+    assert {"de", "es", "fr", "ru"}.issubset(languages)
+
+
+def test_new_translations_load():
+    for code, expected in {
+        "de": "Bild",
+        "es": "Imagen",
+        "fr": "Image",
+        "ru": "Изображение",
+    }.items():
+        assert i18n.init(code) == code
+        assert i18n.translate("category.image") == expected
+        # Partially translated files still fall back to English.
+        assert i18n.translate("app.name") == "Nitor"
 
 
 def test_language_detection_from_environment(monkeypatch):

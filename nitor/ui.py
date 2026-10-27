@@ -43,7 +43,11 @@ from .settings import Settings  # noqa: E402
 log = logging.getLogger(__name__)
 
 LANGUAGE_NAMES = {
+    "de": "Deutsch",
     "en": "English",
+    "es": "Español",
+    "fr": "Français",
+    "ru": "Русский",
     "tr": "Türkçe",
 }
 

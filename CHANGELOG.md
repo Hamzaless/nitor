@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Monitor details model that combines sysfs (status, modes, refresh), EDID
+  (manufacturer, model, serial) and DDC information (panel type, firmware,
+  usage time, VCP version) with defensive fallbacks.
+- Diagnostics reports can now be turned into a prefilled GitHub issue with
+  title, body and labels.
+- German, Spanish, French and Russian translations. English remains the
+  fallback for keys that are not translated yet.
+- Tag based release workflow: `v*` tags run lint and tests, then publish a
+  GitHub release with generated notes.
+
 ## [1.3.0] - 2026-10-27
 
 ### Added
