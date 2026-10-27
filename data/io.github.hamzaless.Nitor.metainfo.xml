@@ -35,6 +35,15 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="1.1.0" date="2026-10-27">
+      <description>
+        <p>The panel hides when you click outside of it.</p>
+        <ul>
+          <li>Auto-hide on focus loss, with an opt-out flag</li>
+        </ul>
+      </description>
+    </release>
+
     <release version="1.0.0" date="2026-10-27">
       <description>
         <p>First public release.</p>

@@ -103,8 +103,10 @@ class FeatureRow:
 class MonitorWindow(Adw.ApplicationWindow):
     """Main window: builds one group per feature category."""
 
-    def __init__(self, app: Adw.Application):
+    def __init__(self, app: Adw.Application, auto_hide: bool = True):
         super().__init__(application=app, title=_("window.title"))
+        self._auto_hide = auto_hide
+        self._was_active = False
         self.set_default_size(560, 780)
         self.set_icon_name(__app_id__)
 
@@ -147,8 +149,33 @@ class MonitorWindow(Adw.ApplicationWindow):
         self.set_content(self._toasts)
 
         self._install_actions()
+        if self._auto_hide:
+            self.connect("notify::is-active", self._on_active_changed)
         self._show_loading()
         threading.Thread(target=self._bootstrap, daemon=True).start()
+
+    # ------------------------------------------------------------- auto hide --
+    def _on_active_changed(self, *_args) -> None:
+        """Hide the panel when the user clicks somewhere else.
+
+        Dialogs count as extra application windows, so an open confirmation
+        dialog never dismisses the panel underneath it.
+        """
+        if self.is_active():
+            self._was_active = True
+            return
+        if not self._was_active or self._has_open_dialog():
+            return
+        GLib.timeout_add(250, self._hide_if_unfocused)
+
+    def _has_open_dialog(self) -> bool:
+        application = self.get_application()
+        return application is not None and len(application.get_windows()) > 1
+
+    def _hide_if_unfocused(self) -> bool:
+        if not self.is_active() and not self._has_open_dialog():
+            self.hide()
+        return False
 
     # ------------------------------------------------------------- actions --
     def _install_actions(self) -> None:
@@ -468,11 +495,12 @@ class MonitorWindow(Adw.ApplicationWindow):
 class NitorApplication(Adw.Application):
     """Adw.Application subclass with single instance behaviour."""
 
-    def __init__(self) -> None:
+    def __init__(self, auto_hide: bool = True) -> None:
         super().__init__(
             application_id=__app_id__,
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
+        self._auto_hide = auto_hide
         self._window: MonitorWindow | None = None
         self.connect("startup", self._on_startup)
 
@@ -503,5 +531,5 @@ class NitorApplication(Adw.Application):
 
     def do_activate(self) -> None:
         if self._window is None:
-            self._window = MonitorWindow(self)
+            self._window = MonitorWindow(self, auto_hide=self._auto_hide)
         self._window.present()

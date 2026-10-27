@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from . import __version__
@@ -30,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="enable verbose logging",
     )
+    parser.add_argument(
+        "--no-auto-hide",
+        action="store_true",
+        help="keep the window open when it loses focus",
+    )
     return parser
 
 
@@ -41,10 +47,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     init_i18n(args.lang)
 
+    auto_hide = not args.no_auto_hide
+    if os.environ.get("NITOR_AUTO_HIDE", "").strip().lower() in {"0", "false", "no", "off"}:
+        auto_hide = False
+
     # Import after logging and translations are configured.
     from .ui import NitorApplication
 
-    application = NitorApplication()
+    application = NitorApplication(auto_hide=auto_hide)
     return application.run([sys.argv[0]])
 
 

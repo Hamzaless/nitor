@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-27
+
+### Added
+
+- Auto-hide: the panel now hides when you click somewhere outside of it.
+  Disable it with `--no-auto-hide` or `NITOR_AUTO_HIDE=0`.
+
+### Changed
+
+- CI now runs on `actions/checkout@v5` and `actions/setup-python@v6`.
+
 ## [1.0.0] - 2026-10-27
 
 ### Added
@@ -25,4 +36,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.1.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.0.0

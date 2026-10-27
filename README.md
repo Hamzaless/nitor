@@ -49,6 +49,8 @@ Everything above is conditional: Nitor only shows what your monitor reports.
 - Debounced writes — dragging a slider does not flood the DDC bus.
 - Protection against monitors that reset brightness and contrast to 100 % when
   the display mode changes.
+- Auto-hide: the panel closes when you click somewhere else, so it behaves like a
+  HUD. Disable with `--no-auto-hide` or `NITOR_AUTO_HIDE=0`.
 - Single-instance window, so a keyboard shortcut always focuses the same panel.
 - About dialog and `--version`.
 
@@ -105,6 +107,7 @@ is the only reliable way to get GTK bindings on most distributions.
 nitor              # open the panel
 nitor --lang tr    # force a language
 nitor --debug      # verbose logging
+nitor --no-auto-hide  # keep the window open when it loses focus
 nitor --version
 ```
 
