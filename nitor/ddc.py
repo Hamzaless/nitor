@@ -20,9 +20,12 @@ __all__ = [
     "DISPLAY_ORDER",
     "ACTIONS",
     "Monitor",
+    "DisplayInfo",
+    "Display",
     "available",
     "capabilities",
     "detect",
+    "list_displays",
     "ddcutil_version",
     "format_value",
     "get",
@@ -115,10 +118,23 @@ _MODEL_RE = re.compile(r"^\s+Model:\s+(.+?)\s*$")
 _MFG_RE = re.compile(r"^\s+Mfg id:\s+(\S+)")
 _CONNECTOR_RE = re.compile(r"^\s+DRM_connector:\s+(.+?)\s*$")
 _BUS_RE = re.compile(r"^\s+I2C bus:\s+/dev/i2c-(\d+)")
+_SERIAL_RE = re.compile(r"^\s+Serial number:\s+(.+?)\s*$")
 
 #: I2C bus discovered by :func:`detect`; reused by every later call so ddcutil
 #: does not have to scan for displays again (roughly twice as fast).
 _BUS: str | None = None
+
+
+class _GlobalBus:
+    """Sentinel: ``_run`` should use the cached module-level :data:`_BUS`."""
+
+    __slots__ = ()
+
+
+_GLOBAL_BUS = _GlobalBus()
+
+#: An explicit bus, ``None`` (let ddcutil pick), or :data:`_GLOBAL_BUS`.
+_BusTarget = str | None | _GlobalBus
 
 
 #: EDID manufacturer IDs are three letters; expand the common ones.
@@ -138,10 +154,27 @@ class Monitor:
 
     @property
     def label(self) -> str:
-        manufacturer = _MFG_NAMES.get(self.manufacturer, self.manufacturer)
-        if manufacturer and manufacturer not in self.model:
-            return f"{manufacturer} {self.model}"
-        return self.model or self.connector or f"Display {self.index}"
+        return _display_label(self.manufacturer, self.model, self.connector, self.index)
+
+
+@dataclass(frozen=True)
+class DisplayInfo:
+    """Everything Nitor needs to address and describe one physical display."""
+
+    index: int
+    bus: str | None
+    connector: str
+    manufacturer: str
+    model: str
+    serial: str
+    label: str
+
+
+def _display_label(manufacturer: str, model: str, connector: str, index: int) -> str:
+    name = _MFG_NAMES.get(manufacturer, manufacturer)
+    if name and name not in model:
+        return f"{name} {model}".strip()
+    return model or connector or f"Display {index}"
 
 
 def available() -> bool:
@@ -153,12 +186,20 @@ def _run(
     *args: str,
     timeout: float = 20.0,
     use_bus: bool = True,
+    bus: _BusTarget = _GLOBAL_BUS,
 ) -> subprocess.CompletedProcess[str]:
+    """Run ``ddcutil`` and capture its output.
+
+    ``bus`` defaults to :data:`_GLOBAL_BUS`, which reuses the bus discovered by
+    :func:`detect`.  Passing an explicit bus (or ``None``) bypasses that cache,
+    which is what :class:`Display` does so displays never fight over ``_BUS``.
+    """
     if not available():
         raise DdcError("ddcutil is not installed")
+    target = _BUS if isinstance(bus, _GlobalBus) else bus
     command = ["ddcutil"]
-    if use_bus and _BUS is not None:
-        command += ["--bus", _BUS]
+    if use_bus and target is not None:
+        command += ["--bus", target]
     command += list(args)
     try:
         return subprocess.run(
@@ -197,15 +238,15 @@ def parse_brief(line: str) -> tuple[int | None, int | None]:
     return None, None
 
 
-def get(code: int, *, retries: int = 2) -> tuple[int | None, int | None]:
-    """Read ``code`` from the first detected monitor.
-
-    Returns ``(current, maximum)``; ``(None, None)`` when the feature is not
-    readable.  DDC/CI is flaky by nature, hence the retry.
-    """
+def _get(
+    bus: _BusTarget,
+    code: int,
+    *,
+    retries: int = 2,
+) -> tuple[int | None, int | None]:
     result: tuple[int | None, int | None] = (None, None)
     for _ in range(max(1, retries)):
-        response = _run("getvcp", f"0x{code:02X}", "--brief")
+        response = _run("getvcp", f"0x{code:02X}", "--brief", bus=bus)
         lines = response.stdout.strip().splitlines()
         if not lines:
             continue
@@ -216,16 +257,21 @@ def get(code: int, *, retries: int = 2) -> tuple[int | None, int | None]:
     return result
 
 
-def read_many(
+def get(code: int, *, retries: int = 2) -> tuple[int | None, int | None]:
+    """Read ``code`` from the first detected monitor.
+
+    Returns ``(current, maximum)``; ``(None, None)`` when the feature is not
+    readable.  DDC/CI is flaky by nature, hence the retry.
+    """
+    return _get(_GLOBAL_BUS, code, retries=retries)
+
+
+def _read_many(
+    bus: _BusTarget,
     codes: list[int],
     *,
     retries: int = 1,
 ) -> dict[int, tuple[int | None, int | None]]:
-    """Read many VCP codes in a single ``ddcutil`` invocation.
-
-    ``ddcutil getvcp`` accepts several feature codes at once, which turns the
-    startup probe from one process per row into a single call.
-    """
     unique = list(dict.fromkeys(codes))
     result: dict[int, tuple[int | None, int | None]] = {code: (None, None) for code in unique}
     if not unique:
@@ -237,6 +283,7 @@ def read_many(
             *[f"0x{code:02X}" for code in unique],
             "--brief",
             timeout=40.0,
+            bus=bus,
         )
         for line in response.stdout.splitlines():
             parts = line.split()
@@ -253,6 +300,44 @@ def read_many(
     return result
 
 
+def read_many(
+    codes: list[int],
+    *,
+    retries: int = 1,
+) -> dict[int, tuple[int | None, int | None]]:
+    """Read many VCP codes in a single ``ddcutil`` invocation.
+
+    ``ddcutil getvcp`` accepts several feature codes at once, which turns the
+    startup probe from one process per row into a single call.
+    """
+    return _read_many(_GLOBAL_BUS, codes, retries=retries)
+
+
+def _set_value(
+    bus: _BusTarget,
+    code: int,
+    value: int,
+    *,
+    retries: int = 2,
+    sleep_multiplier: str = "0.1",
+) -> bool:
+    for _ in range(max(1, retries)):
+        try:
+            response = _run(
+                "--sleep-multiplier",
+                sleep_multiplier,
+                "setvcp",
+                f"0x{code:02X}",
+                str(value),
+                bus=bus,
+            )
+        except DdcError:
+            return False
+        if response.returncode == 0:
+            return True
+    return False
+
+
 def set_value(
     code: int,
     value: int,
@@ -265,29 +350,20 @@ def set_value(
     ``sleep_multiplier`` is passed to ddcutil; lower values make bulk writes
     (for example applying a preset) considerably faster.
     """
-    for _ in range(max(1, retries)):
-        try:
-            response = _run(
-                "--sleep-multiplier",
-                sleep_multiplier,
-                "setvcp",
-                f"0x{code:02X}",
-                str(value),
-            )
-        except DdcError:
-            return False
-        if response.returncode == 0:
-            return True
-    return False
+    return _set_value(
+        _GLOBAL_BUS,
+        code,
+        value,
+        retries=retries,
+        sleep_multiplier=sleep_multiplier,
+    )
 
 
-def capabilities() -> dict[int, dict[int, str]]:
-    """Return ``{code: {raw_value: label}}`` from the capabilities string."""
-    response = _run("capabilities", timeout=25.0)
+def _parse_capabilities(text: str) -> dict[int, dict[int, str]]:
     result: dict[int, dict[int, str]] = {}
     current: int | None = None
 
-    for line in response.stdout.splitlines():
+    for line in text.splitlines():
         match = _FEATURE_RE.match(line)
         if match:
             current = int(match.group(1), 16)
@@ -308,19 +384,44 @@ def capabilities() -> dict[int, dict[int, str]]:
     return result
 
 
-def detect() -> list[Monitor]:
-    """Return the monitors ``ddcutil`` can see."""
-    global _BUS
+def _capabilities(bus: _BusTarget = _GLOBAL_BUS) -> dict[int, dict[int, str]]:
+    response = _run("capabilities", timeout=25.0, bus=bus)
+    return _parse_capabilities(response.stdout)
+
+
+def capabilities() -> dict[int, dict[int, str]]:
+    """Return ``{code: {raw_value: label}}`` from the capabilities string."""
+    return _capabilities()
+
+
+def list_displays() -> list[DisplayInfo]:
+    """Return every display ``ddcutil detect`` can see, in ddcutil order.
+
+    Unlike :func:`detect` this keeps the I2C bus and serial number and never
+    touches the module-level bus cache, so it is safe to call while other
+    displays are in use.
+    """
     response = _run("detect", timeout=25.0, use_bus=False)
-    monitors: list[Monitor] = []
+    displays: list[DisplayInfo] = []
     index: int | None = None
-    model = manufacturer = connector = ""
+    bus: str | None = None
+    model = manufacturer = connector = serial = ""
 
     def flush() -> None:
-        nonlocal index, model, manufacturer, connector
+        nonlocal index, bus, model, manufacturer, connector, serial
         if index is not None:
-            monitors.append(Monitor(index, model, manufacturer, connector))
-        index, model, manufacturer, connector = None, "", "", ""
+            displays.append(
+                DisplayInfo(
+                    index=index,
+                    bus=bus,
+                    connector=connector,
+                    manufacturer=manufacturer,
+                    model=model,
+                    serial=serial,
+                    label=_display_label(manufacturer, model, connector, index),
+                )
+            )
+        index, bus, model, manufacturer, connector, serial = None, None, "", "", "", ""
 
     for line in response.stdout.splitlines():
         display_match = _DISPLAY_RE.match(line)
@@ -334,12 +435,83 @@ def detect() -> list[Monitor]:
             model = match.group(1)
         elif match := _MFG_RE.match(line):
             manufacturer = match.group(1)
+        elif match := _SERIAL_RE.match(line):
+            serial = match.group(1)
         elif match := _CONNECTOR_RE.match(line):
             connector = match.group(1)
         elif match := _BUS_RE.match(line):
-            _BUS = match.group(1)
+            bus = match.group(1)
     flush()
-    return monitors
+    return displays
+
+
+def detect() -> list[Monitor]:
+    """Return the monitors ``ddcutil`` can see.
+
+    Kept for the existing UI; :func:`list_displays` returns the richer
+    :class:`DisplayInfo` records.  ``_BUS`` is pinned to the first display so
+    the module-level functions keep addressing display 1.
+    """
+    global _BUS
+    displays = list_displays()
+    if displays and displays[0].bus is not None:
+        _BUS = displays[0].bus
+    return [
+        Monitor(info.index, info.model, info.manufacturer, info.connector)
+        for info in displays
+    ]
+
+
+class Display:
+    """One physical monitor addressed by its own I2C bus.
+
+    Unlike the module-level functions, an instance never reads or writes
+    :data:`_BUS`: each call passes this display's own ``--bus`` so several
+    instances can be used side by side without interfering.
+    """
+
+    def __init__(self, info: DisplayInfo) -> None:
+        self.info = info
+
+    def __repr__(self) -> str:
+        return (
+            f"Display(index={self.info.index}, "
+            f"label={self.info.label!r}, bus={self.info.bus!r})"
+        )
+
+    def capabilities(self) -> dict[int, dict[int, str]]:
+        """Return ``{code: {raw_value: label}}`` for this display."""
+        return _capabilities(self.info.bus)
+
+    def read_many(
+        self,
+        codes: list[int],
+        *,
+        retries: int = 1,
+    ) -> dict[int, tuple[int | None, int | None]]:
+        """Read many VCP codes from this display in one invocation."""
+        return _read_many(self.info.bus, codes, retries=retries)
+
+    def get(self, code: int, *, retries: int = 2) -> tuple[int | None, int | None]:
+        """Read ``code`` from this display as ``(current, maximum)``."""
+        return _get(self.info.bus, code, retries=retries)
+
+    def set_value(
+        self,
+        code: int,
+        value: int,
+        sleep_multiplier: str = "0.1",
+        *,
+        retries: int = 2,
+    ) -> bool:
+        """Write ``value`` to ``code`` on this display."""
+        return _set_value(
+            self.info.bus,
+            code,
+            value,
+            retries=retries,
+            sleep_multiplier=sleep_multiplier,
+        )
 
 
 def ddcutil_version() -> str:
