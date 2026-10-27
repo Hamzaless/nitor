@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Tag based release workflow: `v*` tags run lint and tests, then publish a
   GitHub release with generated notes.
 
+## [1.4.1] - 2026-10-27
+
+### Fixed
+
+- Saved presets were not loaded into the dropdown when the window opened.
+- Compact mode now shrinks the window on Hyprland instead of leaving a tall
+  empty page.
+- Dialog titles for Settings and the preset manager.
+
+### Added
+
+- `app.details` and `app.presets` actions, usable from scripts and DBus.
+
 ## [1.4.0] - 2026-10-27
 
 ### Added
@@ -107,6 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.4.1]: https://github.com/Hamzaless/nitor/releases/tag/v1.4.1
 [1.4.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.4.0
 [1.3.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.3.0
 [1.2.1]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.1

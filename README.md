@@ -15,6 +15,14 @@ GTK 4 / libadwaita window.
 
 ![Nitor screenshot](docs/screenshot.png)
 
+| Details | Compact | Settings |
+| --- | --- | --- |
+| [![Details](docs/details.png)](docs/details.png) | [![Compact](docs/compact.png)](docs/compact.png) | [![Settings](docs/settings.png)](docs/settings.png) |
+
+| Presets |  |
+| --- | --- |
+| [![Preset manager](docs/presets.png)](docs/presets.png) | |
+
 ## Why another monitor tool?
 
 Most DDC tools are either a raw command line or an old Qt dialog with a wall of

@@ -449,6 +449,7 @@ class MonitorWindow(Adw.ApplicationWindow):
         container.append(self._search_entry)
         container.append(page)
 
+        self._populate_presets()
         self._view_stack.add_titled_with_icon(
             container, "controls", _("view.controls"), "video-display-symbolic"
         )
@@ -791,7 +792,7 @@ class MonitorWindow(Adw.ApplicationWindow):
         dialog.present(self)
 
     def show_preset_manager(self) -> None:
-        dialog = Adw.PreferencesDialog()
+        dialog = Adw.PreferencesDialog(title=_("preset.manage_title"))
         page = Adw.PreferencesPage()
         dialog.add(page)
         self._manager_group = Adw.PreferencesGroup(title=_("preset.manage_title"))
@@ -943,7 +944,7 @@ class MonitorWindow(Adw.ApplicationWindow):
 
     # ------------------------------------------------------------- settings --
     def show_settings(self) -> None:
-        dialog = Adw.PreferencesDialog()
+        dialog = Adw.PreferencesDialog(title=_("settings.title"))
         page = Adw.PreferencesPage()
         dialog.add(page)
 
@@ -1544,6 +1545,30 @@ class MonitorWindow(Adw.ApplicationWindow):
         if self._release_url:
             Gio.AppInfo.launch_default_for_uri(self._release_url, None)
 
+    def resize_for_view(self, name: str) -> None:
+        """Shrink the window in compact mode on Hyprland (best effort)."""
+        height = 420 if name == "compact" else 860
+        if not shutil.which("hyprctl"):
+            return
+        try:
+            active = json.loads(
+                subprocess.run(
+                    ["hyprctl", "activewindow", "-j"],
+                    capture_output=True, text=True, timeout=2, check=False,
+                ).stdout
+            )
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return
+        if active.get("class") != __app_id__:
+            return
+        subprocess.run(
+            [
+                "hyprctl", "eval",
+                f"hl.dispatch(hl.dsp.window.resize({{ x = 640, y = {height}, relative = false }}))",
+            ],
+            capture_output=True, timeout=3, check=False,
+        )
+
     # ------------------------------------------------------------- hotplug --
     def start_hotplug(self) -> None:
         GLib.timeout_add_seconds(15, self._poll_displays)
@@ -1608,6 +1633,14 @@ class NitorApplication(Adw.Application):
         compact.connect("activate", lambda *_: self._compact_action())
         self.add_action(compact)
 
+        details = Gio.SimpleAction.new("details", None)
+        details.connect("activate", lambda *_: self._show_view("details"))
+        self.add_action(details)
+
+        presets_action = Gio.SimpleAction.new("presets", None)
+        presets_action.connect("activate", lambda *_: self._show_presets())
+        self.add_action(presets_action)
+
         quit_action = Gio.SimpleAction.new("quit", None)
         quit_action.connect("activate", lambda *_: self.quit())
         self.add_action(quit_action)
@@ -1621,13 +1654,22 @@ class NitorApplication(Adw.Application):
         if self._window is not None:
             self._window.check_updates()
 
+    def _show_view(self, name: str) -> None:
+        if self._window is not None:
+            self._window._view_stack.set_visible_child_name(name)
+            self._window.resize_for_view(name)
+
+    def _show_presets(self) -> None:
+        if self._window is not None:
+            self._window.show_preset_manager()
+
     def _compact_action(self) -> None:
         if self._window is None:
             return
         stack = self._window._view_stack
-        stack.set_visible_child_name(
-            "controls" if stack.get_visible_child_name() == "compact" else "compact"
-        )
+        target = "controls" if stack.get_visible_child_name() == "compact" else "compact"
+        stack.set_visible_child_name(target)
+        self._window.resize_for_view(target)
 
     def _on_about(self, *_args) -> None:
         dialog = Adw.AboutDialog(
