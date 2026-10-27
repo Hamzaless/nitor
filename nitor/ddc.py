@@ -25,6 +25,7 @@ __all__ = [
     "detect",
     "format_value",
     "get",
+    "read_many",
     "parse_brief",
     "set_value",
 ]
@@ -112,6 +113,11 @@ _DISPLAY_RE = re.compile(r"^Display\s+(\d+)\s*$")
 _MODEL_RE = re.compile(r"^\s+Model:\s+(.+?)\s*$")
 _MFG_RE = re.compile(r"^\s+Mfg id:\s+(\S+)")
 _CONNECTOR_RE = re.compile(r"^\s+DRM_connector:\s+(.+?)\s*$")
+_BUS_RE = re.compile(r"^\s+I2C bus:\s+/dev/i2c-(\d+)")
+
+#: I2C bus discovered by :func:`detect`; reused by every later call so ddcutil
+#: does not have to scan for displays again (roughly twice as fast).
+_BUS: str | None = None
 
 
 #: EDID manufacturer IDs are three letters; expand the common ones.
@@ -142,12 +148,20 @@ def available() -> bool:
     return shutil.which("ddcutil") is not None
 
 
-def _run(*args: str, timeout: float = 20.0) -> subprocess.CompletedProcess[str]:
+def _run(
+    *args: str,
+    timeout: float = 20.0,
+    use_bus: bool = True,
+) -> subprocess.CompletedProcess[str]:
     if not available():
         raise DdcError("ddcutil is not installed")
+    command = ["ddcutil"]
+    if use_bus and _BUS is not None:
+        command += ["--bus", _BUS]
+    command += list(args)
     try:
         return subprocess.run(
-            ["ddcutil", *args],
+            command,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -201,13 +215,60 @@ def get(code: int, *, retries: int = 2) -> tuple[int | None, int | None]:
     return result
 
 
-def set_value(code: int, value: int, *, retries: int = 2) -> bool:
-    """Write ``value`` to ``code``.  Returns True on a clean exit."""
+def read_many(
+    codes: list[int],
+    *,
+    retries: int = 1,
+) -> dict[int, tuple[int | None, int | None]]:
+    """Read many VCP codes in a single ``ddcutil`` invocation.
+
+    ``ddcutil getvcp`` accepts several feature codes at once, which turns the
+    startup probe from one process per row into a single call.
+    """
+    unique = list(dict.fromkeys(codes))
+    result: dict[int, tuple[int | None, int | None]] = {code: (None, None) for code in unique}
+    if not unique:
+        return result
+
+    for _ in range(max(1, retries)):
+        response = _run(
+            "getvcp",
+            *[f"0x{code:02X}" for code in unique],
+            "--brief",
+            timeout=40.0,
+        )
+        for line in response.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 2 or parts[0] != "VCP":
+                continue
+            try:
+                code = int(parts[1], 16)
+            except ValueError:
+                continue
+            if code in result:
+                result[code] = parse_brief(line)
+        if any(value[0] is not None for value in result.values()):
+            break
+    return result
+
+
+def set_value(
+    code: int,
+    value: int,
+    *,
+    retries: int = 2,
+    sleep_multiplier: str = "0.1",
+) -> bool:
+    """Write ``value`` to ``code``.  Returns True on a clean exit.
+
+    ``sleep_multiplier`` is passed to ddcutil; lower values make bulk writes
+    (for example applying a preset) considerably faster.
+    """
     for _ in range(max(1, retries)):
         try:
             response = _run(
                 "--sleep-multiplier",
-                "0.4",
+                sleep_multiplier,
                 "setvcp",
                 f"0x{code:02X}",
                 str(value),
@@ -248,7 +309,8 @@ def capabilities() -> dict[int, dict[int, str]]:
 
 def detect() -> list[Monitor]:
     """Return the monitors ``ddcutil`` can see."""
-    response = _run("detect", timeout=25.0)
+    global _BUS
+    response = _run("detect", timeout=25.0, use_bus=False)
     monitors: list[Monitor] = []
     index: int | None = None
     model = manufacturer = connector = ""
@@ -273,6 +335,8 @@ def detect() -> list[Monitor]:
             manufacturer = match.group(1)
         elif match := _CONNECTOR_RE.match(line):
             connector = match.group(1)
+        elif match := _BUS_RE.match(line):
+            _BUS = match.group(1)
     flush()
     return monitors
 

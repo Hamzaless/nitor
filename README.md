@@ -41,6 +41,7 @@ undocumented VCP codes. Nitor aims for the middle ground:
 | **On-screen display** | OSD language |
 | **Information** | Horizontal and vertical frequency, panel technology, usage time, application key, controller, firmware, VCP version |
 | **Actions** | Restore factory defaults, restore brightness/contrast, restore colour |
+| **Presets** | Save the current state and re-apply it later from a dropdown |
 
 Everything above is conditional: Nitor only shows what your monitor reports.
 
@@ -49,8 +50,14 @@ Everything above is conditional: Nitor only shows what your monitor reports.
 - Debounced writes — dragging a slider does not flood the DDC bus.
 - Protection against monitors that reset brightness and contrast to 100 % when
   the display mode changes.
+- **Fast**: every feature is read in a single `ddcutil` call and the I2C bus is
+  reused, so a full refresh takes about two seconds.
 - Auto-hide: the panel closes when you click somewhere else, so it behaves like a
-  HUD. Disable with `--no-auto-hide` or `NITOR_AUTO_HIDE=0`.
+  HUD. Disable in Settings, with `--no-auto-hide` or `NITOR_AUTO_HIDE=0`.
+- Settings dialog for language, auto-hide and slider delay (saved in
+  `~/.config/nitor/settings.json`).
+- A full-window progress overlay shows exactly which setting is being written
+  while a preset is applied, and blocks input until it finishes.
 - Single-instance window, so a keyboard shortcut always focuses the same panel.
 - About dialog and `--version`.
 
@@ -120,13 +127,20 @@ Nitor does not grab keys globally. Bind it in your desktop.
 **Hyprland** (`~/.config/hypr/hyprland.conf`):
 
 ```ini
-bind = SUPER SHIFT, M, exec, nitor
+bind = SUPER, M, exec, nitor
 windowrulev2 = float, class:^(io.github.hamzaless.Nitor)$
 windowrulev2 = size 560 780, class:^(io.github.hamzaless.Nitor)$
 windowrulev2 = center, class:^(io.github.hamzaless.Nitor)$
 ```
 
 **GNOME / KDE**: create a custom shortcut that runs `nitor`.
+
+### Presets
+
+The **Presets** section at the top of the window can save the current brightness,
+contrast, colour preset, gamma, saturation and volume as a named preset. Pick a
+preset from the dropdown and press **Apply**. Built-in presets were removed on
+purpose: a preset should describe *your* monitor, not a guess.
 
 ## Languages
 

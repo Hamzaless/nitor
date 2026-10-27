@@ -9,6 +9,7 @@ import sys
 
 from . import __version__
 from .i18n import init as init_i18n
+from .settings import Settings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,7 +46,9 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
-    init_i18n(args.lang)
+    settings = Settings.load()
+    language = args.lang or (None if settings.language == "system" else settings.language)
+    init_i18n(language)
 
     auto_hide = not args.no_auto_hide
     if os.environ.get("NITOR_AUTO_HIDE", "").strip().lower() in {"0", "false", "no", "off"}:
@@ -54,7 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     # Import after logging and translations are configured.
     from .ui import NitorApplication
 
-    application = NitorApplication(auto_hide=auto_hide)
+    settings.auto_hide = auto_hide
+    application = NitorApplication(settings)
     return application.run([sys.argv[0]])
 
 

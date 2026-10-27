@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-27
+
+### Added
+
+- Presets: save the current monitor state and re-apply it from a dropdown.
+- Settings dialog with language selection, auto-hide and slider delay.
+- Full-window progress overlay with per-feature status while a preset runs.
+- Locked-feature detection: Nitor warns when a monitor ignores a change
+  because the current picture mode locks it.
+
+### Changed
+
+- All features are read in a single `ddcutil` call and the discovered I2C bus
+  is reused, cutting start-up from roughly 15 s to about 2 s.
+- Slider writes use a 150 ms debounce and a lower DDC sleep multiplier, so
+  changes feel immediate.
+
 ## [1.1.0] - 2026-10-27
 
 ### Added
@@ -36,5 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Single instance behaviour and an About dialog.
 - Unit tests, lint configuration and GitHub Actions CI.
 
+[1.2.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Hamzaless/nitor/releases/tag/v1.0.0

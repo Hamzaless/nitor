@@ -15,7 +15,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import __app_id__, __version__  # noqa: E402
 from .ddc import (  # noqa: E402
@@ -28,11 +28,21 @@ from .ddc import (  # noqa: E402
     detect,
     format_value,
     get,
+    read_many,
     set_value,
 )
+from .i18n import available_languages  # noqa: E402
+from .i18n import init as init_i18n  # noqa: E402
 from .i18n import translate as _  # noqa: E402
+from .presets import CAPTURE_CODES, normalized  # noqa: E402
+from .settings import Settings  # noqa: E402
 
 log = logging.getLogger(__name__)
+
+LANGUAGE_NAMES = {
+    "en": "English",
+    "tr": "Türkçe",
+}
 
 #: Features that reset picture settings on many monitors.
 RESTORE_CODES = {0xDC, 0x14}
@@ -101,22 +111,26 @@ class FeatureRow:
 
 
 class MonitorWindow(Adw.ApplicationWindow):
-    """Main window: builds one group per feature category."""
+    """Main window: presets, one group per feature category and settings."""
 
-    def __init__(self, app: Adw.Application, auto_hide: bool = True):
+    def __init__(self, app: Adw.Application, settings: Settings):
         super().__init__(application=app, title=_("window.title"))
-        self._auto_hide = auto_hide
-        self._was_active = False
-        self.set_default_size(560, 780)
+        self.set_default_size(560, 820)
         self.set_icon_name(__app_id__)
 
+        self._settings = settings
         self._rows: dict[int, FeatureRow] = {}
         self._cache: dict[str, list[int | None]] = {}
         self._timers: dict[int, int] = {}
         self._loading = False
+        self._busy = False
         self._ready = False
         self._monitor: Monitor | None = None
         self._groups: dict[str, Adw.PreferencesGroup] = {}
+        self._auto_hide = settings.auto_hide
+        self._debounce_ms = settings.debounce_ms
+        self._active_handler: int | None = None
+        self._was_active = False
 
         self._title = Adw.WindowTitle(title=_("window.title"), subtitle="")
         header = Adw.HeaderBar()
@@ -126,16 +140,17 @@ class MonitorWindow(Adw.ApplicationWindow):
         self._spinner.set_visible(False)
         header.pack_start(self._spinner)
 
-        refresh = Gtk.Button(icon_name="view-refresh-symbolic")
-        refresh.set_tooltip_text(_("tooltip.refresh"))
-        refresh.connect("clicked", lambda *_: self.reload())
-        header.pack_end(refresh)
+        self._refresh_button = Gtk.Button(icon_name="view-refresh-symbolic")
+        self._refresh_button.set_tooltip_text(_("tooltip.refresh"))
+        self._refresh_button.connect("clicked", lambda *_: self.reload())
+        header.pack_end(self._refresh_button)
 
         menu = Gio.Menu()
+        menu.append(_("menu.settings"), "app.settings")
         menu.append(_("menu.refresh"), "win.refresh")
         menu.append(_("menu.about"), "app.about")
-        menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
-        header.pack_end(menu_button)
+        self._menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
+        header.pack_end(self._menu_button)
 
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
@@ -146,25 +161,32 @@ class MonitorWindow(Adw.ApplicationWindow):
 
         self._toasts = Adw.ToastOverlay()
         self._toasts.set_child(toolbar)
-        self.set_content(self._toasts)
+
+        self._overlay = Gtk.Overlay()
+        self._overlay.set_child(self._toasts)
+        self._build_busy_overlay()
+        self._overlay.add_overlay(self._busy_box)
+        self.set_content(self._overlay)
 
         self._install_actions()
         if self._auto_hide:
-            self.connect("notify::is-active", self._on_active_changed)
+            self._active_handler = self.connect("notify::is-active", self._on_active_changed)
         self._show_loading()
         threading.Thread(target=self._bootstrap, daemon=True).start()
 
-    # ------------------------------------------------------------- auto hide --
-    def _on_active_changed(self, *_args) -> None:
-        """Hide the panel when the user clicks somewhere else.
+    # -------------------------------------------------------------- actions --
+    def _install_actions(self) -> None:
+        refresh = Gio.SimpleAction.new("refresh", None)
+        refresh.connect("activate", lambda *_: self.reload())
+        self.add_action(refresh)
 
-        Dialogs count as extra application windows, so an open confirmation
-        dialog never dismisses the panel underneath it.
-        """
+
+    # ------------------------------------------------------------ auto hide --
+    def _on_active_changed(self, *_args) -> None:
         if self.is_active():
             self._was_active = True
             return
-        if not self._was_active or self._has_open_dialog():
+        if self._busy or not self._was_active or self._has_open_dialog():
             return
         GLib.timeout_add(250, self._hide_if_unfocused)
 
@@ -177,13 +199,15 @@ class MonitorWindow(Adw.ApplicationWindow):
             self.hide()
         return False
 
-    # ------------------------------------------------------------- actions --
-    def _install_actions(self) -> None:
-        refresh = Gio.SimpleAction.new("refresh", None)
-        refresh.connect("activate", lambda *_: self.reload())
-        self.add_action(refresh)
+    def _set_auto_hide(self, enabled: bool) -> None:
+        self._auto_hide = enabled
+        if enabled and self._active_handler is None:
+            self._active_handler = self.connect("notify::is-active", self._on_active_changed)
+        elif not enabled and self._active_handler is not None:
+            self.disconnect(self._active_handler)
+            self._active_handler = None
 
-    # ------------------------------------------------------------- states ---
+    # --------------------------------------------------------------- states --
     def _show_loading(self) -> None:
         page = Adw.StatusPage(title=_("status.loading"), icon_name="video-display-symbolic")
         spinner = Gtk.Spinner()
@@ -231,6 +255,11 @@ class MonitorWindow(Adw.ApplicationWindow):
         self._title.set_subtitle(monitor.label)
 
         page = Adw.PreferencesPage()
+
+        self._presets_group = Adw.PreferencesGroup(title=_("preset.title"))
+        page.add(self._presets_group)
+        self._build_presets_group()
+
         self._groups = {}
         for key in ("category.image", "category.audio", "category.input", "category.osd",
                     "category.info", "category.actions"):
@@ -262,7 +291,10 @@ class MonitorWindow(Adw.ApplicationWindow):
 
             elif meta.kind == "enum":
                 combo = Adw.ComboRow(title=title)
-                labels = [_value_label(code, value, feature_row.values) for value in sorted(feature_row.values)]
+                labels = [
+                    _value_label(code, value, feature_row.values)
+                    for value in sorted(feature_row.values)
+                ]
                 combo.set_model(Gtk.StringList.new(labels or ["—"]))
                 combo.connect("notify::selected", self._on_combo_changed, code)
                 feature_row.row = combo
@@ -285,7 +317,7 @@ class MonitorWindow(Adw.ApplicationWindow):
                 feature_row.row = action_row
                 group.add(action_row)
 
-        if "category.image" in self._groups and known:
+        if known:
             hint = Gtk.Label(label=_("hint.mode_lock"), wrap=True, xalign=0)
             hint.add_css_class("dim-label")
             hint.set_margin_top(10)
@@ -297,11 +329,274 @@ class MonitorWindow(Adw.ApplicationWindow):
             self._show_error(_("error.monitor.title"), _("error.monitor.body"))
             return False
 
+        self._populate_presets()
         self._stack.add_named(page, "content")
         self._stack.set_visible_child_name("content")
         self._load_cache()
         self.reload()
         return False
+
+    # ----------------------------------------------------------- busy overlay --
+    def _build_busy_overlay(self) -> None:
+        provider = Gtk.CssProvider()
+        provider.load_from_string(
+            ".nitor-busy { background-color: alpha(@window_bg_color, 0.98); }"
+        )
+        display = Gdk.Display.get_default()
+        if display is not None:
+            Gtk.StyleContext.add_provider_for_display(
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        self._busy_page = Adw.StatusPage()
+        self._busy_page.add_css_class("nitor-busy")
+        self._busy_page.set_hexpand(True)
+        self._busy_page.set_vexpand(True)
+        self._busy_page.set_halign(Gtk.Align.FILL)
+        self._busy_page.set_valign(Gtk.Align.FILL)
+        self._busy_page.set_can_target(True)
+        self._busy_page.set_visible(False)
+        self._busy_page.set_icon_name("video-display-symbolic")
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_halign(Gtk.Align.CENTER)
+
+        self._busy_spinner = Gtk.Spinner()
+        self._busy_spinner.set_size_request(36, 36)
+
+        self._busy_progress = Gtk.ProgressBar()
+        self._busy_progress.set_size_request(300, -1)
+
+        content.append(self._busy_spinner)
+        content.append(self._busy_progress)
+        self._busy_page.set_child(content)
+
+        self._busy_box = self._busy_page
+
+    def _show_busy(self, total: int) -> None:
+        self._busy = True
+        self._busy_total = max(1, total)
+        self._busy_page.set_title(_("preset.preparing"))
+        self._busy_page.set_description("")
+        self._busy_progress.set_fraction(0.0)
+        self._busy_spinner.start()
+        self._refresh_button.set_sensitive(False)
+        self._menu_button.set_sensitive(False)
+        self._busy_page.set_visible(True)
+
+    def _update_busy(self, index: int, total: int, code: int) -> bool:
+        meta = FEATURES.get(code)
+        name = _(meta.key) if meta is not None else f"0x{code:02X}"
+        self._busy_page.set_description(_("preset.step", feature=name))
+        self._busy_progress.set_fraction(min(1.0, index / max(1, total)))
+        return False
+
+    def _finish_busy(self, ok: bool) -> bool:
+        self._busy_spinner.stop()
+        self._busy_progress.set_fraction(1.0)
+        self._busy_page.set_title(_("preset.applied") if ok else _("error.write_failed"))
+        self._busy_page.set_description("")
+        GLib.timeout_add(700, self._hide_busy)
+        return False
+
+    def _hide_busy(self) -> bool:
+        self._busy_page.set_visible(False)
+        self._busy = False
+        self._refresh_button.set_sensitive(True)
+        self._menu_button.set_sensitive(True)
+        return False
+
+    # -------------------------------------------------------------- presets --
+    def _build_presets_group(self) -> None:
+        self._preset_names: list[str] = []
+
+        self._preset_dropdown = Gtk.DropDown.new_from_strings([_("preset.none")])
+        self._preset_dropdown.set_sensitive(False)
+
+        self._preset_apply = Gtk.Button(label=_("preset.apply"))
+        self._preset_apply.add_css_class("pill")
+        self._preset_apply.set_sensitive(False)
+        self._preset_apply.connect("clicked", lambda *_: self._apply_selected_preset())
+
+        select_row = Adw.ActionRow(title=_("preset.select"))
+        select_row.add_suffix(self._preset_dropdown)
+        select_row.add_suffix(self._preset_apply)
+        self._presets_group.add(select_row)
+
+        save_row = Adw.ActionRow(
+            title=_("preset.save_title"),
+            subtitle=_("preset.save_subtitle"),
+        )
+        save_button = Gtk.Button(label=_("preset.save"))
+        save_button.add_css_class("pill")
+        save_button.connect("clicked", lambda *_: self._save_preset())
+        save_row.add_suffix(save_button)
+        self._presets_group.add(save_row)
+
+    def _populate_presets(self) -> None:
+        self._preset_names = sorted(self._settings.presets)
+        if self._preset_names:
+            self._preset_dropdown.set_model(Gtk.StringList.new(self._preset_names))
+            self._preset_dropdown.set_selected(0)
+            self._preset_dropdown.set_sensitive(True)
+            self._preset_apply.set_sensitive(True)
+        else:
+            self._preset_dropdown.set_model(Gtk.StringList.new([_("preset.none")]))
+            self._preset_dropdown.set_sensitive(False)
+            self._preset_apply.set_sensitive(False)
+
+    def _apply_selected_preset(self) -> None:
+        if self._busy or not self._preset_names:
+            return
+        index = self._preset_dropdown.get_selected()
+        if not 0 <= index < len(self._preset_names):
+            return
+        raw = self._settings.presets.get(self._preset_names[index])
+        if not raw:
+            return
+        try:
+            values = {int(code): int(value) for code, value in raw.items()}
+        except (TypeError, ValueError):
+            return
+        self._apply_preset(values)
+
+    def _apply_preset(self, values: dict[int, int]) -> None:
+        ordered: list[tuple[int, int]] = []
+        for code, value in normalized(values):
+            if code not in self._rows:
+                continue
+            current = self._cache.get(str(code), [None, None])[0]
+            if current == value:
+                continue
+            ordered.append((code, value))
+
+        if not ordered:
+            self._toast(_("preset.applied"))
+            return
+
+        # Move the sliders immediately so the user sees what is happening.
+        for code, value in ordered:
+            maximum = self._cache.get(str(code), [None, None])[1]
+            self._apply(code, value, maximum)
+
+        codes = tuple(code for code, _value in ordered)
+        self._preset_apply.set_sensitive(False)
+        self._show_busy(len(ordered))
+
+        def run() -> None:
+            ok = True
+            total = len(ordered)
+            for index, (code, value) in enumerate(ordered, start=1):
+                GLib.idle_add(self._update_busy, index, total, code)
+                if not set_value(code, value, sleep_multiplier="0.1"):
+                    ok = False
+            GLib.idle_add(self._finish_preset, codes, ok)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _finish_preset(self, codes: tuple[int, ...], ok: bool) -> bool:
+        if self._preset_names:
+            self._preset_apply.set_sensitive(True)
+        self._finish_busy(ok)
+        self._refresh_codes(codes)
+        return False
+
+    def _save_preset(self) -> None:
+        captured: dict[str, int] = {}
+        for code in CAPTURE_CODES:
+            if code not in self._rows:
+                continue
+            current = self._cache.get(str(code), [None, None])[0]
+            if current is not None:
+                captured[str(code)] = current
+        if not captured:
+            self._toast(_("error.write_failed"))
+            return
+
+        dialog = Adw.AlertDialog(heading=_("preset.save_title"), body=_("preset.name_hint"))
+        entry = Gtk.Entry(placeholder_text=_("preset.name_placeholder"))
+        dialog.set_extra_child(entry)
+        dialog.add_response("cancel", _("action.cancel"))
+        dialog.add_response("save", _("preset.save"))
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("save")
+        dialog.set_close_response("cancel")
+
+        def on_response(_dialog: Adw.AlertDialog, response: str) -> None:
+            if response != "save":
+                return
+            name = entry.get_text().strip()[:60]
+            if not name:
+                return
+            self._settings.presets[name] = captured
+            self._settings.save()
+            self._populate_presets()
+            if name in self._preset_names:
+                self._preset_dropdown.set_selected(self._preset_names.index(name))
+            self._toast(_("preset.saved", name=name))
+
+        dialog.connect("response", on_response)
+        dialog.present(self)
+
+    # ------------------------------------------------------------- settings --
+    def show_settings(self) -> None:
+        dialog = Adw.PreferencesDialog()
+        page = Adw.PreferencesPage()
+        dialog.add(page)
+
+        group = Adw.PreferencesGroup(title=_("settings.title"))
+        page.add(group)
+
+        languages = ["system", *available_languages()]
+        labels = [_("settings.language.system"), *[LANGUAGE_NAMES.get(code, code) for code in languages[1:]]]
+        language_row = Adw.ComboRow(title=_("settings.language"))
+        language_row.set_model(Gtk.StringList.new(labels))
+        current = self._settings.language if self._settings.language in languages else "system"
+        language_row.set_selected(languages.index(current))
+        language_row.connect("notify::selected", self._on_language_selected, languages)
+        group.add(language_row)
+
+        auto_hide_row = Adw.SwitchRow(
+            title=_("settings.auto_hide"),
+            subtitle=_("settings.auto_hide_desc"),
+        )
+        auto_hide_row.set_active(self._auto_hide)
+        auto_hide_row.connect("notify::active", self._on_auto_hide_toggled)
+        group.add(auto_hide_row)
+
+        debounce_row = Adw.SpinRow.new_with_range(50, 2000, 50)
+        debounce_row.set_title(_("settings.debounce"))
+        debounce_row.set_subtitle(_("settings.debounce_desc"))
+        debounce_row.set_value(self._debounce_ms)
+        debounce_row.connect("notify::value", self._on_debounce_changed)
+        group.add(debounce_row)
+
+        dialog.present(self)
+
+    def _on_language_selected(self, row: Adw.ComboRow, _pspec, languages: list[str]) -> None:
+        index = row.get_selected()
+        if not 0 <= index < len(languages):
+            return
+        language = languages[index]
+        if language == self._settings.language:
+            return
+        self._settings.language = language
+        self._settings.save()
+        application = self.get_application()
+        if application is not None:
+            application.reload_ui(language)
+
+    def _on_auto_hide_toggled(self, row: Adw.SwitchRow, _pspec) -> None:
+        enabled = row.get_active()
+        self._settings.auto_hide = enabled
+        self._settings.save()
+        self._set_auto_hide(enabled)
+
+    def _on_debounce_changed(self, row: Adw.SpinRow, _pspec) -> None:
+        value = int(row.get_value())
+        self._debounce_ms = value
+        self._settings.debounce_ms = value
+        self._settings.save()
 
     # ------------------------------------------------------------ read/write -
     def reload(self) -> None:
@@ -312,8 +607,8 @@ class MonitorWindow(Adw.ApplicationWindow):
         threading.Thread(target=self._read_all, daemon=True).start()
 
     def _read_all(self) -> None:
-        for code in list(self._rows):
-            current, maximum = get(code)
+        values = read_many(list(self._rows))
+        for code, (current, maximum) in values.items():
             GLib.idle_add(self._apply, code, current, maximum)
         GLib.idle_add(self._finish_load)
 
@@ -352,21 +647,23 @@ class MonitorWindow(Adw.ApplicationWindow):
         return False
 
     def _on_scale_changed(self, scale: Gtk.Scale, code: int) -> None:
-        if self._loading or not self._ready:
+        if self._loading or not self._ready or self._busy:
             return
         previous = self._timers.pop(code, None)
         if previous:
             GLib.source_remove(previous)
         value = int(round(scale.get_value()))
-        self._timers[code] = GLib.timeout_add(300, self._flush_scale, code, value)
+        self._timers[code] = GLib.timeout_add(self._debounce_ms, self._flush_scale, code, value)
 
     def _flush_scale(self, code: int, value: int) -> bool:
         self._timers.pop(code, None)
-        threading.Thread(target=self._write, args=(code, value), daemon=True).start()
+        threading.Thread(
+            target=self._write, args=(code, value), kwargs={"verify": True}, daemon=True
+        ).start()
         return False
 
     def _on_combo_changed(self, combo: Adw.ComboRow, _pspec, code: int) -> None:
-        if self._loading or not self._ready:
+        if self._loading or not self._ready or self._busy:
             return
         feature = self._rows.get(code)
         if feature is None:
@@ -378,12 +675,11 @@ class MonitorWindow(Adw.ApplicationWindow):
         value = values[index]
         confirmation = CONFIRM_VALUES.get((code, value))
         if confirmation:
-            self._confirm_write(code, value, feature, *confirmation)
+            self._confirm_write(code, value, *confirmation)
             return
         threading.Thread(target=self._write, args=(code, value), daemon=True).start()
 
-    def _confirm_write(self, code: int, value: int, feature: FeatureRow,
-                       title_key: str, body_key: str) -> None:
+    def _confirm_write(self, code: int, value: int, title_key: str, body_key: str) -> None:
         dialog = Adw.MessageDialog(
             transient_for=self,
             heading=_(title_key),
@@ -406,27 +702,39 @@ class MonitorWindow(Adw.ApplicationWindow):
         dialog.connect("response", on_response)
         dialog.present()
 
-    def _write(self, code: int, value: int) -> None:
-        """Write a value, restoring brightness/contrast when a mode changes."""
+    def _write(self, code: int, value: int, *, verify: bool = False) -> None:
         saved: dict[int, int] = {}
         if code in RESTORE_CODES:
             for companion in (0x10, 0x12):
                 current, _maximum = get(companion)
                 if current is not None:
                     saved[companion] = current
+
         ok = set_value(code, value)
+        locked = False
+        if ok and verify:
+            current, _maximum = get(code)
+            if current is not None and current != value:
+                ok = False
+                locked = True
+                meta = FEATURES.get(code)
+                name = _(meta.key) if meta is not None else f"0x{code:02X}"
+                GLib.idle_add(self._toast, _("error.locked", feature=name))
+                GLib.idle_add(self._apply, code, current, None)
+
         if saved:
             time.sleep(2.0)
             for companion, previous in saved.items():
                 set_value(companion, previous)
-        if not ok:
+
+        if not ok and not locked:
             GLib.idle_add(self._toast, _("error.write_failed"))
         GLib.idle_add(self._refresh_codes, (code, *saved.keys()))
 
     def _refresh_codes(self, codes: tuple[int, ...]) -> bool:
         def run() -> None:
-            for code in codes:
-                current, maximum = get(code)
+            values = read_many(list(codes))
+            for code, (current, maximum) in values.items():
                 GLib.idle_add(self._apply, code, current, maximum)
 
         threading.Thread(target=run, daemon=True).start()
@@ -447,10 +755,12 @@ class MonitorWindow(Adw.ApplicationWindow):
         def on_response(_dialog: Adw.MessageDialog, response: str) -> None:
             if response != "apply":
                 return
+
             def run() -> None:
                 ok = set_value(code, 0)
                 GLib.idle_add(self._toast, _("action.done") if ok else _("error.write_failed"))
                 GLib.idle_add(self._refresh_all_delayed)
+
             threading.Thread(target=run, daemon=True).start()
 
         dialog.connect("response", on_response)
@@ -495,12 +805,12 @@ class MonitorWindow(Adw.ApplicationWindow):
 class NitorApplication(Adw.Application):
     """Adw.Application subclass with single instance behaviour."""
 
-    def __init__(self, auto_hide: bool = True) -> None:
+    def __init__(self, settings: Settings):
         super().__init__(
             application_id=__app_id__,
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
-        self._auto_hide = auto_hide
+        self._settings = settings
         self._window: MonitorWindow | None = None
         self.connect("startup", self._on_startup)
 
@@ -508,6 +818,13 @@ class NitorApplication(Adw.Application):
         about = Gio.SimpleAction.new("about", None)
         about.connect("activate", self._on_about)
         self.add_action(about)
+
+        settings = Gio.SimpleAction.new("settings", None)
+        settings.connect(
+            "activate",
+            lambda *_: self._window.show_settings() if self._window is not None else None,
+        )
+        self.add_action(settings)
         quit_action = Gio.SimpleAction.new("quit", None)
         quit_action.connect("activate", lambda *_: self.quit())
         self.add_action(quit_action)
@@ -529,7 +846,18 @@ class NitorApplication(Adw.Application):
         dialog.add_link(_("about.issues"), "https://github.com/Hamzaless/nitor/issues")
         dialog.present(self._window or self.get_active_window())
 
+    def reload_ui(self, language: str | None = None) -> None:
+        """Recreate the window, optionally after switching language."""
+        if language is not None:
+            init_i18n(None if language == "system" else language)
+        previous = self._window
+        self._window = None
+        if previous is not None:
+            previous.destroy()
+        self._window = MonitorWindow(self, self._settings)
+        self._window.present()
+
     def do_activate(self) -> None:
         if self._window is None:
-            self._window = MonitorWindow(self, auto_hide=self._auto_hide)
+            self._window = MonitorWindow(self, self._settings)
         self._window.present()

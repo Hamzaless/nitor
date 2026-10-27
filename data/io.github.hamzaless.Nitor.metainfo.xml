@@ -35,6 +35,18 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="1.2.0" date="2026-10-27">
+      <description>
+        <p>Presets, settings and a much faster start-up.</p>
+        <ul>
+          <li>Save and apply monitor presets from a dropdown</li>
+          <li>Language, auto-hide and slider delay in a settings dialog</li>
+          <li>Full-window progress overlay with per-feature status</li>
+          <li>Single-call feature reads: start-up drops from ~15 s to ~2 s</li>
+        </ul>
+      </description>
+    </release>
+
     <release version="1.1.0" date="2026-10-27">
       <description>
         <p>The panel hides when you click outside of it.</p>

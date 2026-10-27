@@ -50,6 +50,7 @@ def test_detect_parsing(monkeypatch):
     assert monitor.model == "VG279QL1A"
     assert monitor.manufacturer == "AUS"
     assert monitor.connector == "card0-DP-1"
+    assert ddc._BUS == "1"  # discovered once and reused by later calls
     assert monitor.label == "ASUS VG279QL1A"
 
 
@@ -58,3 +59,19 @@ def test_detect_without_monitor(monkeypatch):
         ddc, "_run", lambda *a, **k: SimpleNamespace(stdout="", returncode=0)
     )
     assert ddc.detect() == []
+
+
+MULTI = """VCP 10 C 40 100
+VCP 62 CNC x00 x64 x00 x32
+VCP 60 SNC x0f
+Feature 04 (Restore factory defaults) is not readable
+"""
+
+
+def test_read_many(monkeypatch):
+    monkeypatch.setattr(ddc, "_run", lambda *a, **k: SimpleNamespace(stdout=MULTI, returncode=0))
+    values = ddc.read_many([0x10, 0x62, 0x60, 0x04])
+    assert values[0x10] == (40, 100)
+    assert values[0x62] == (50, 100)
+    assert values[0x60] == (15, None)
+    assert values[0x04] == (None, None)
