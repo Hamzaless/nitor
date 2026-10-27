@@ -62,3 +62,44 @@ def test_values_are_sanitised(tmp_path, monkeypatch):
     assert settings.auto_hide is True
     assert settings.debounce_ms == 2000
     assert settings.presets == {"ok": {"16": 40}}
+
+
+def test_automation_fields_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    original = Settings(
+        presets={"Gece": {"16": 20}},
+        schedule=[{"time": "20:00", "preset": "Gece", "days": [0, 1, 2]}],
+        app_presets={"kitty": "Gece"},
+        last_run={"Gece": "2026-10-27"},
+    )
+    original.save()
+
+    loaded = Settings.load()
+    assert loaded.schedule == [{"time": "20:00", "preset": "Gece", "days": [0, 1, 2]}]
+    assert loaded.app_presets == {"kitty": "Gece"}
+    assert loaded.last_run == {"Gece": "2026-10-27"}
+
+
+def test_automation_fields_are_sanitised(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    path = config_path()
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schedule": [
+                    {"time": "20:00", "preset": "Gece", "days": [1, 9, "x"]},
+                    {"time": "25:00", "preset": "Bad"},
+                    {"time": "08:00", "preset": "  "},
+                    "nope",
+                ],
+                "app_presets": {"kitty": "Gece", "bad": 5, "": "Gece"},
+                "last_run": {"Gece": "2026-10-27", "bad": 5},
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = Settings.load()
+    assert settings.schedule == [{"time": "20:00", "preset": "Gece", "days": [1]}]
+    assert settings.app_presets == {"kitty": "Gece"}
+    assert settings.last_run == {"Gece": "2026-10-27"}
