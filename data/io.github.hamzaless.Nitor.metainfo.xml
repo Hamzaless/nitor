@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.hamzaless.Nitor</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Nitor</name>
+  <summary>Monitor control for Linux</summary>
+
+  <description>
+    <p>
+      Nitor is a small, focused monitor control panel for Linux. It talks to your
+      display over DDC/CI and exposes every standard feature the monitor reports
+      in its capabilities string: brightness, contrast, colour preset, RGB gain,
+      gamma, saturation, scaling, input source, speaker volume, OSD language and
+      a read-only information section.
+    </p>
+    <p>
+      The interface is built with GTK 4 and libadwaita, follows the system light
+      or dark style, reads values from a cache so it opens instantly, and writes
+      changes with a short debounce so dragging a slider does not flood the DDC
+      bus.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.hamzaless.Nitor.desktop</launchable>
+
+  <url type="homepage">https://github.com/Hamzaless/nitor</url>
+  <url type="bugtracker">https://github.com/Hamzaless/nitor/issues</url>
+
+  <developer id="io.github.hamzaless">
+    <name>Hamzaless</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="1.0.0" date="2026-10-27">
+      <description>
+        <p>First public release.</p>
+        <ul>
+          <li>Automatic feature discovery from the monitor capabilities string</li>
+          <li>Brightness, contrast, colour, gamma, saturation, scaling and volume</li>
+          <li>Input source, power mode and OSD language</li>
+          <li>Read-only information: frequencies, panel type, usage time, firmware</li>
+          <li>English and Turkish translations</li>
+          <li>Single instance, cached values and mode-change protection</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Adjusting a monitor</caption>
+      <image type="source">https://raw.githubusercontent.com/Hamzaless/nitor/main/docs/screenshot.png</image>
+    </screenshot>
+  </screenshots>
+</component>

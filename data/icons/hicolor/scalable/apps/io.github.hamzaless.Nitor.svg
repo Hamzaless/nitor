@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Nitor">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c1b1f"/>
+      <stop offset="1" stop-color="#2d2a33"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f9d976"/>
+      <stop offset="1" stop-color="#f39f86"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#bg)"/>
+
+  <rect x="20" y="26" width="88" height="54" rx="8"
+        fill="none" stroke="#e7e1e2" stroke-width="5"/>
+  <path d="M64 80v14M52 94h24" fill="none" stroke="#e7e1e2"
+        stroke-width="5" stroke-linecap="round"/>
+
+  <g stroke="#f9d976" stroke-width="3.2" stroke-linecap="round">
+    <path d="M78 53h5"/>
+    <path d="M73.9 62.9l3.5 3.5"/>
+    <path d="M64 67v5"/>
+    <path d="M54.1 62.9l-3.5 3.5"/>
+    <path d="M50 53h-5"/>
+    <path d="M54.1 43.1l-3.5-3.5"/>
+    <path d="M64 39v-5"/>
+    <path d="M73.9 43.1l3.5-3.5"/>
+  </g>
+  <circle cx="64" cy="53" r="10" fill="url(#sun)"/>
+</svg>

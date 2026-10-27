@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nitor"
+version = "1.0.0"
+description = "A modern monitor control panel for Linux, built on DDC/CI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Hamzaless", url = "https://github.com/Hamzaless" }]
+keywords = ["ddc", "ddcutil", "monitor", "brightness", "contrast", "gtk4", "libadwaita", "linux"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications :: GTK",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Desktop Environment",
+    "Topic :: System :: Hardware",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/Hamzaless/nitor"
+Issues = "https://github.com/Hamzaless/nitor/issues"
+Source = "https://github.com/Hamzaless/nitor"
+
+[project.scripts]
+nitor = "nitor.app:main"
+
+[tool.setuptools]
+packages = ["nitor"]
+
+[tool.setuptools.package-data]
+nitor = ["translations/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
