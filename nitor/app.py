@@ -8,6 +8,7 @@ import os
 import sys
 
 from . import __version__
+from .cli import try_run
 from .i18n import init as init_i18n
 from .settings import Settings
 
@@ -41,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else list(argv)
+
+    handled = try_run(arguments)
+    if handled is not None:
+        return handled
+
     args = build_parser().parse_args(argv)
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
